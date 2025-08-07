@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
+
 import axios from 'axios';
 import Cart from './components/Cart';
 import Footer from './components/Footer';
@@ -9,15 +10,14 @@ import './App.css';
 
 
 const API_URL = "https://www.foodchow.com/api/FoodChowWD/GetRestaurantMenuWDWidget_multi?ShopId=3161&locale_id=null";
-
 function App() {
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+   const sectionRefs = useRef({});
 
-  // Fetch categories
   useEffect(() => {
     fetch(API_URL)
       .then((res) => res.json())
@@ -33,21 +33,36 @@ function App() {
         setLoading(false);
       });
   }, []);
+useEffect(() => {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      const visibleEntries = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
 
-  // Fetch menu items
-  useEffect(() => {
-    if (selectedCategory) {
-      const items = selectedCategory?.ItemListWidget || selectedCategory?.ItemList || [];
-      const formattedItems = items.map((item) => ({
-        ItemId: item.ItemId ?? item.MenuItemId ?? Math.random(),
-        ItemName: item.ItemName,
-        Price: item.Price ?? 0,
-        Description: item.Description ?? "",
-        ItemImage: item.ItemImage ?? "",
-      }));
-      setMenuItems(formattedItems);
+      if (visibleEntries.length > 0) {
+        const topMost = visibleEntries[0];
+        const catId = topMost.target.id.split("-")[1];
+        const newCat = categories.find((c) => c.CategryId.toString() === catId);
+        if (newCat && newCat.CategryId !== selectedCategory?.CategryId) {
+          setSelectedCategory(newCat);
+        }
+      }
+    },
+    {
+      root: null,
+      rootMargin: "0px 0px -60% 0px", // fire when top 40% of item enters viewport
+      threshold: 0.1,
     }
-  }, [selectedCategory]);
+  );
+
+  Object.values(sectionRefs.current).forEach((section) => {
+    if (section) observer.observe(section);
+  });
+
+  return () => observer.disconnect();
+}, [categories, selectedCategory]);
+
 
   const handleAddToCart = (item) => {
     console.log("Added to cart:", item);
@@ -55,69 +70,116 @@ function App() {
 
   const filteredItems = menuItems.filter((item) =>
     item.ItemName.toLowerCase().includes(searchQuery.toLowerCase())
+
   );
 
+ 
+  const onSelectCategory = (cat) => {
+    setSelectedCategory(cat);
+    const section = sectionRefs.current[cat.CategryId];
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      {/* Fixed Header */}
+    <div className="h-screen flex flex-col">
       <Header />
 
-      {/* Main Layout Below Header */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <aside className="w-1/5 bg-gray-100 p-4 overflow-y-auto">
-          <Sidebar
-            categories={categories}
-            selectedCategory={selectedCategory}
-            onSelectCategory={(cat) => {
-              setSelectedCategory(cat);
-              setSearchQuery("");
-            }}
-          />
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+        <aside className="w-full md:w-[20%] bg-white border-r p-4 overflow-y-auto md:h-auto max-h-[100vh]">
+          <h3 className="text-xl font-bold mb-4">Categories</h3>
+          <ul className="space-y-2">
+            {categories.map((cat) => (
+              <li
+                key={cat.CategryId}
+                onClick={() => onSelectCategory(cat)}
+                className={`cursor-pointer px-3 py-2 rounded transition-colors duration-200 ${
+                  selectedCategory?.CategryId === cat.CategryId
+                    ? "bg-green-600 text-white font-semibold"
+                    : "text-gray-800 hover:bg-green-100"
+                }`}
+              >
+                {cat.CategryName}
+              </li>
+            ))}
+          </ul>
         </aside>
 
-        {/* Scrollable Menu Items */}
-        <main className="flex-1 overflow-y-auto bg-white p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-            <h2 className="text-2xl font-semibold text-gray-800">
-              {selectedCategory?.CategryName || "Menu"}
-            </h2>
-            <input
-              type="text"
-              placeholder="🔍 Search dishes..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2 w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+        <main className="w-full md:w-[60%] bg-white p-6 overflow-y-auto">
+         <div className="w-full mb-6">
+  <div className="flex items-center border border-green-600 rounded-full px-4 py-2 w-full">
+    <input
+      type="text"
+      placeholder="Search for dishes"
+      value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)}
+      className="flex-grow outline-none text-gray-800 placeholder-gray-500 text-sm bg-transparent"
+    />
+    <svg
+      className="w-5 h-5 text-green-600"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"
+      />
+    </svg>
+ 
+</div>
+
+
           </div>
 
           {loading ? (
-            <p className="text-center text-gray-500 text-lg">Loading menu...</p>
-          ) : filteredItems.length === 0 ? (
-            <p className="text-center text-red-500 font-medium">No items found for this category.</p>
+            <p className="text-center text-gray-500">Loading menu...</p>
           ) : (
-            <div className="flex flex-col gap-4">
-  {filteredItems.map((item) => (
-    <MenuItemCard key={item.ItemId} item={item} onAdd={handleAddToCart} />
-  ))}
-</div>
-
+            <div className="grid gap-4">
+              {categories.map((cat) => (
+                <div
+                  key={cat.CategryId}
+                  id={`category-${cat.CategryId}`}
+                  ref={(el) => (sectionRefs.current[cat.CategryId] = el)}
+                >
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">
+                    {cat.CategryName}
+                  </h3>
+                  {(cat.ItemListWidget || []).filter((item) =>
+                    item.ItemName.toLowerCase().includes(searchQuery.toLowerCase())
+                  ).map((item) => (
+                    <MenuItemCard
+                      key={item.ItemId || item.MenuItemId}
+                      item={{
+                        ItemId: item.ItemId ?? item.MenuItemId ?? Math.random(),
+                        ItemName: item.ItemName,
+                        Price: item.Price ?? 0,
+                        Description: item.Description ?? "",
+                        ItemImage: item.ItemImage ?? ""
+                      }}
+                      onAdd={handleAddToCart}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
           )}
         </main>
 
-        {/* Cart (fixed height and scrollable if needed) */}
-        <aside className="w-1/4 bg-gray-100 p-4 overflow-y-auto">
+        <aside className="w-full md:w-[20%] bg-gray-100 p-4 overflow-y-auto max-h-[100vh]">
           <Cart />
         </aside>
       </div>
 
-      {/* Footer (optional to show always or conditionally) */}
       <Footer />
     </div>
   );
 }
 
 export default App;
+
 
 
 // function App() {
@@ -168,11 +230,14 @@ export default App;
 //   );
 
 //   return (
-//     <>
+//     <div className="h-screen flex flex-col overflow-hidden">
+//       {/* Fixed Header */}
 //       <Header />
-//       <div className="flex flex-col lg:flex-row gap-4 px-4 md:px-8 py-6 bg-gray-100 min-h-screen">
+
+//       {/* Main Layout Below Header */}
+//       <div className="flex flex-1 overflow-hidden">
 //         {/* Sidebar */}
-//         <div className="lg:w-1/5 w-full">
+//         <aside className="w-1/5 bg-gray-100 p-4 overflow-y-auto">
 //           <Sidebar
 //             categories={categories}
 //             selectedCategory={selectedCategory}
@@ -181,10 +246,10 @@ export default App;
 //               setSearchQuery("");
 //             }}
 //           />
-//         </div>
+//         </aside>
 
-//         {/* Main Content */}
-//         <main className="flex-1 bg-white shadow-md rounded-xl p-6">
+//         {/* Scrollable Menu Items */}
+//         <main className="flex-1 overflow-y-auto bg-white p-6">
 //           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
 //             <h2 className="text-2xl font-semibold text-gray-800">
 //               {selectedCategory?.CategryName || "Menu"}
@@ -203,24 +268,25 @@ export default App;
 //           ) : filteredItems.length === 0 ? (
 //             <p className="text-center text-red-500 font-medium">No items found for this category.</p>
 //           ) : (
-//             <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-//               {filteredItems.map((item) => (
-//                 <MenuItemCard key={item.ItemId} item={item} onAdd={handleAddToCart} />
-//               ))}
-//             </div>
+//             <div className="flex flex-col gap-4">
+//   {filteredItems.map((item) => (
+//     <MenuItemCard key={item.ItemId} item={item} onAdd={handleAddToCart} />
+//   ))}
+// </div>
+
 //           )}
 //         </main>
 
-//         {/* Cart */}
-//         <div className="lg:w-1/4 w-full">
+//         {/* Cart (fixed height and scrollable if needed) */}
+//         <aside className="w-1/4 bg-gray-100 p-4 overflow-y-auto">
 //           <Cart />
-//         </div>
+//         </aside>
 //       </div>
+
+//       {/* Footer (optional to show always or conditionally) */}
 //       <Footer />
-//     </>
+//     </div>
 //   );
 // }
 
 // export default App;
-
-
